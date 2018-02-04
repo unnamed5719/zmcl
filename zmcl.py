@@ -201,7 +201,7 @@ class FilesProsess:
         if os.path.exists(file): # check if downloaded but haven't unzip
             zf = zipfile.ZipFile(file)
             for zip_list in zf.filelist:
-                if os.path.exists(zip_list.orig_filename):
+                if os.path.exists(file_path+'/'+zip_list.orig_filename):
                     print(zip_list.orig_filename, 'is already extracted, pass')
                 else:
                     with zipfile.ZipFile(file) as zip_file:
@@ -268,10 +268,12 @@ def record_cmd(arg):
 
 def execute_cmd(arg):
     for i in record_cmd(arg):
-        print(i.decode('utf-8', 'ignore'))
+        try:
+            print(i.decode('utf-8', 'ignore')) 
+        except UnicodeEncodeError:
+            print(i.decode('gbk'))
 
 
-    
 if __name__ == '__main__':
     import time
     import getpass
