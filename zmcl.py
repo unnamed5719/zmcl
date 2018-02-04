@@ -268,10 +268,7 @@ def record_cmd(arg):
 
 def execute_cmd(arg):
     for i in record_cmd(arg):
-        try:
-            print(i.decode('utf-8', 'ignore')) 
-        except UnicodeEncodeError:
-            print(i.decode('gbk'))
+        print(i.decode(sys.stdout.encoding)) 
 
 
 if __name__ == '__main__':
