@@ -23,10 +23,7 @@ import zipfile
 import subprocess
 from urllib import request
 
-class AuthenticateError(Exception):
-    pass
-class RefreshError(Exception):
-    pass
+
 class ComputerBusy(Exception):
     pass
 
@@ -53,9 +50,6 @@ class Yggdrasil:
 
         auth_resp = json.loads(request.urlopen(auth_requ).read().decode())      
         
-        if 'availableProfiles' not in auth_resp:
-            raise AuthenticateError('Authenticate Failed:',str(auth_resp))
-        
         self.accessToken = auth_resp['accessToken']
         self.clientToken = auth_resp['clientToken']
         self.uuid = auth_resp['selectedProfile']['id']
@@ -75,9 +69,6 @@ class Yggdrasil:
                                        data=json.dumps(refresh_payload).encode())
 
         refresh_resp = json.loads(request.urlopen(refresh_requ).read().decode())      
-        
-        if not 'accessToken' in refresh_resp:
-            raise RefreshError('Refresh Failed:',str(refresh_resp))
 
         self.accessToken = refresh_resp['accessToken']
         self.clientToken = refresh_resp['clientToken']
@@ -115,21 +106,24 @@ class GameFile:
             self.json_game_json = json.loads(game_json.read())
         self.asset_index_id = self.json_game_json['assetIndex']['id']
         asset_index_url = self.json_game_json['assetIndex']['url']
+        size = self.json_game_json['assetIndex']['size']
         FilesProsess.auto_mkdir('.minecraft/assets/indexes/')
-        FilesProsess.downloader(asset_index_url, '.minecraft/assets/indexes/'+self.asset_index_id+'.json')
+        FilesProsess.downloader(asset_index_url, '.minecraft/assets/indexes/'+self.asset_index_id+'.json', size)
     
     def get_objects(self):
         with open('.minecraft/assets/indexes/'+self.asset_index_id+'.json') as objects_file:
             json_objects = json.loads(objects_file.read())
         for object in json_objects['objects']:
             hash_string = json_objects['objects'][object]['hash']
+            size = json_objects['objects'][object]['size']
             FilesProsess.auto_mkdir('.minecraft/assets/objects/'+hash_string[:2])
             FilesProsess.downloader(self.objects_url+hash_string[:2]+'/'+hash_string, 
-                                    '.minecraft/assets/objects/'+hash_string[:2]+'/'+hash_string)
+                                    '.minecraft/assets/objects/'+hash_string[:2]+'/'+hash_string, size)
             
     def get_client(self):
         client_url = self.json_game_json['downloads']['client']['url']
-        FilesProsess.downloader(client_url, self.game_json_file_dir+self.latest_version+'.jar')
+        size = self.json_game_json['downloads']['client']['size']
+        FilesProsess.downloader(client_url, self.game_json_file_dir+self.latest_version+'.jar', size)
     
     def get_libraries(self):
         class_path = ''
@@ -141,9 +135,10 @@ class GameFile:
                         print(library['name'],"isn't for current system, ignore")
                         continue
                 url = library['downloads']['classifiers']['natives-windows']['url']
+                size = library['downloads']['classifiers']['natives-windows']['size']
                 _, file_name = os.path.split(url)
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
-                FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name)
+                FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
                 FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name, self.game_json_file_dir+'natives')
                 # os.remove(self.game_json_file_dir+'/natives/'+file_name) 
                 # we don't need it any more, but will cost unnecessary download
@@ -153,17 +148,19 @@ class GameFile:
                     continue
                 else:
                     url = library['downloads']['artifact']['url']
+                    size = library['downloads']['artifact']['size']
                     full_path = url.replace('https://libraries.minecraft.net','.minecraft/libraries')
                     file_path, _ = os.path.split(full_path)
                     FilesProsess.auto_mkdir(file_path)
-                    FilesProsess.downloader(url, full_path)
+                    FilesProsess.downloader(url, full_path, size)
                     class_path += self.cwd+full_path+';'
             else:
                 url = library['downloads']['artifact']['url']
+                size = library['downloads']['artifact']['size']
                 full_path = url.replace('https://libraries.minecraft.net','.minecraft/libraries')
                 file_path, _ = os.path.split(full_path)
                 FilesProsess.auto_mkdir(file_path)
-                FilesProsess.downloader(url, full_path)
+                FilesProsess.downloader(url, full_path, size)
                 class_path += self.cwd+full_path+';'
         return class_path
         
@@ -179,11 +176,9 @@ class FilesProsess:
         if not os.path.exists(dirs):
             os.makedirs(dirs)
 
-    def downloader(url, path):# path aka path + file name
-        # TODO: size check
-        if os.path.exists(path) and os.path.getsize(path):
-        # looks like unfinished download will make a file as zero-size.
-        # except user press Ctrl+C
+    def downloader(url, path, size=None):# path aka path + file name
+        if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)):
+        # if we got size, check is it same? otherwise check it is non-zero-size
             print(path,'is already exists, pass')
         else:
             print('Downloading',path) 
@@ -266,9 +261,10 @@ def record_cmd(arg):
             break
         yield out.rstrip()
 
+encoding = sys.stdout.encoding
 def execute_cmd(arg):
     for i in record_cmd(arg):
-        print(i.decode(sys.stdout.encoding)) 
+        print(i.decode(encoding))
 
 
 if __name__ == '__main__':
@@ -330,7 +326,7 @@ if __name__ == '__main__':
         assets_index_name = game_file.asset_index_id,
         auth_uuid = yggdrasil.uuid,
         auth_access_token = yggdrasil.accessToken,
-        user_type = 'mojang',
+        user_type = 'mojang', # or legacy 
         version_type = 'release'
     ) 
     
