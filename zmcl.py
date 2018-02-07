@@ -9,9 +9,6 @@ written in Python using Built-in module
 for windows only, but can launch in other system 
 by doing some modification.
 thanks to wiki.vg
-
-TODO:
-Downloading Multi files at the same time 
 '''
 
 
