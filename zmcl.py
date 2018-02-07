@@ -246,7 +246,10 @@ class DownloadWorker(Thread):
             self.downloader(link, size)
             self.queue.task_done()
 
-    def downloader(self, path, size):
+    def downloader(self, url, size):
+        url=url[0];size=size[0]
+        objects_url = 'http://resources.download.minecraft.net'
+        path = url.replace(objects_url,'.minecraft/assets/objects')
         if os.path.exists(path) and os.path.getsize(path) == size:
             print(path,'is already exists, pass')
         else:
