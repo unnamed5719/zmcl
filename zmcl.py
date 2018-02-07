@@ -21,11 +21,10 @@ import json
 import ctypes
 import zipfile
 import subprocess
+from queue import Queue
 from urllib import request
-
-
-class ComputerBusy(Exception):
-    pass
+from itertools import chain
+from threading import Thread
 
 
 class Yggdrasil:
@@ -111,15 +110,40 @@ class GameFile:
         FilesProsess.downloader(asset_index_url, '.minecraft/assets/indexes/'+self.asset_index_id+'.json', size)
     
     def get_objects(self):
+        file_url_list = []
         with open('.minecraft/assets/indexes/'+self.asset_index_id+'.json') as objects_file:
             json_objects = json.loads(objects_file.read())
         for object in json_objects['objects']:
             hash_string = json_objects['objects'][object]['hash']
             size = json_objects['objects'][object]['size']
             FilesProsess.auto_mkdir('.minecraft/assets/objects/'+hash_string[:2])
-            FilesProsess.downloader(self.objects_url+hash_string[:2]+'/'+hash_string, 
-                                    '.minecraft/assets/objects/'+hash_string[:2]+'/'+hash_string, size)
-            
+            file_url_list.append([[self.objects_url+hash_string[:2]+'/'+hash_string], [size]])   
+          # FilesProsess.downloader(self.objects_url+hash_string[:2]+'/'+hash_string, 
+                                  # '.minecraft/assets/objects/'+hash_string[:2]+'/'+hash_string, size)
+        return file_url_list
+    
+    def dl_object(self):
+        file_url_list = self.get_objects()
+        
+        # Create a queue to communicate with the worker threads
+        queue = Queue()
+        
+        # Create 8 worker threads
+        for x in range(16):
+            worker = DownloadWorker(queue)
+            # Setting daemon to True will let the main thread exit even though the
+            # workers are blocking
+            worker.daemon = True
+            worker.start()
+        # Put the tasks into the queue as a tuple
+        for file_url in file_url_list:
+            queue.put(file_url)
+        
+        # Causes the main thread to wait for the queue to finish processing all
+        # the tasks
+        queue.join()
+        
+        
     def get_client(self):
         client_url = self.json_game_json['downloads']['client']['url']
         size = self.json_game_json['downloads']['client']['size']
@@ -205,6 +229,37 @@ class FilesProsess:
             with zipfile.ZipFile(file) as zip_file:
                 zip_file.extractall(file_path)
 
+class DownloadWorker(Thread):
+    '''parallel downloader''' 
+    # From https://www.jianshu.com/p/d87c951d8416
+    
+    def __init__(self, queue):
+        Thread.__init__(self)
+        self.queue = queue
+
+    def run(self):
+        while True:
+            # Get the work from the queue and expand the tuple
+            link, size= self.queue.get()
+            if link is None:
+                break
+            self.downloader(link, size)
+            self.queue.task_done()
+
+    def downloader(self, path, size):
+        if os.path.exists(path) and os.path.getsize(path) == size:
+            print(path,'is already exists, pass')
+        else:
+            _, name = os.path.split(path)
+            print('Downloading',path) 
+            def process_bar(blocknum, blocksize, totalsize):
+                percent = 100 * blocknum * blocksize / totalsize
+                if percent > 100:
+                    percent = 100
+                print(name, "Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
+            request.urlretrieve(url, path, process_bar) 
+            print('Done!')             
+        
 class ConfigFile:
     '''read/write configuration file'''
     
@@ -250,7 +305,7 @@ def get_memory():
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
     mem = stat.ullAvailPhys/1073741824 # GiB here
     if mem < 1:
-        raise ComputerBusy('Computer is busy now.')       
+        raise MemoryError('Computer is busy now.')       
     return '-Xmx'+str(int(mem))+'G' # Yes, not round()
 
 def record_cmd(arg):
@@ -301,6 +356,7 @@ if __name__ == '__main__':
     game_file.get_game_json()
     game_file.get_assetindex_json()
     game_file.get_objects()
+    game_file.dl_object()
     game_file.get_client()
     class_path = game_file.get_libraries()
     arguments = game_file.get_arguments()
@@ -335,5 +391,6 @@ if __name__ == '__main__':
         ' -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true -cp ' + class_path + \
         game_file.game_json_file_dir+game_file.latest_version+'.jar ' + mc_arg
     
+    print('='*20+'Launching begin'+'='*20)
     execute_cmd(final_args)
 
