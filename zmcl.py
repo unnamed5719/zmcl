@@ -1,7 +1,7 @@
 #coding=utf-8
 
 __author__ = 'unnmaed5719'
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 '''
 zero minecraft launcher
@@ -20,7 +20,6 @@ import zipfile
 import subprocess
 from queue import Queue
 from urllib import request
-from itertools import chain
 from threading import Thread
 
 
