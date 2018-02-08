@@ -37,7 +37,7 @@ class Yggdrasil:
         auth_payload = {
             "agent": {"name": "Minecraft","version": "1"},
             "username": self.email,
-            "password": self._password,
+            "password": self._password
         }
         auth_requ = request.Request(url=authenticate_url, 
                                     headers=self.headers, 
@@ -69,6 +69,20 @@ class Yggdrasil:
         self.clientToken = refresh_resp['clientToken']
         self.uuid = refresh_resp['selectedProfile']['id']
         self.display_name = refresh_resp['selectedProfile']['name']
+        
+        return True
+       
+    def validate(self, accessToken):
+        validate_url = self.server_url+'validate'
+
+        validate_payload = {
+            "accessToken": accessToken
+        }
+        validate_requ = request.Request(url=validate_url, 
+                                        headers=self.headers, 
+                                        data=json.dumps(validate_payload).encode())
+
+        request.urlopen(validate_requ).read().decode()
         
         return True
 
@@ -124,19 +138,17 @@ class GameFile:
         # Create a queue to communicate with the worker threads
         queue = Queue()
         
-        # Create 8 worker threads
+        # Create 16 worker threads
         for x in range(16):
             worker = DownloadWorker(queue)
-            # Setting daemon to True will let the main thread exit even though the
-            # workers are blocking
+            # Setting daemon to True will let the main thread exit even though the workers are blocking
             worker.daemon = True
             worker.start()
         # Put the tasks into the queue as a tuple
         for file_url in file_url_list:
             queue.put(file_url)
         
-        # Causes the main thread to wait for the queue to finish processing all
-        # the tasks
+        # Causes the main thread to wait for the queue to finish processing all the tasks
         queue.join()
         
         
@@ -197,7 +209,7 @@ class FilesProsess:
             os.makedirs(dirs)
 
     def downloader(url, path, size=None):# path aka path + file name
-        if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)):
+        if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)) and os.path.getsize(path):
         # if we got size, check is it same? otherwise check it is non-zero-size
             print(path,'is already exists, pass')
         else:
@@ -236,8 +248,9 @@ class DownloadWorker(Thread):
     def run(self):
         while True:
             # Get the work from the queue and expand the tuple
-            link, size= self.queue.get()
+            link, size = self.queue.get()
             if link is None:
+                self.queue.task_done()
                 break
             self.downloader(link, size)
             self.queue.task_done()
@@ -245,7 +258,7 @@ class DownloadWorker(Thread):
     def downloader(self, url, size):
         url=url[0];size=size[0]
         objects_url = 'http://resources.download.minecraft.net'
-        path = url.replace(objects_url,'.minecraft/assets/objects')
+        path = url.replace(objects_url, '.minecraft/assets/objects')
         if os.path.exists(path) and os.path.getsize(path) == size:
             print(path,'is already exists, pass')
         else:
@@ -342,19 +355,21 @@ if __name__ == '__main__':
         expires_time = config_file.expires_time
 
         if int(expires_time) < time.time():
-            print('accessToken is expired, please login again.')
-            yggdrasil = Yggdrasil(email, getpass.getpass())  
-            yggdrasil.authenticate()
+            yggdrasil = Yggdrasil(email, '')  
+            yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
            
         else:
             yggdrasil = Yggdrasil(email, '')
-            yggdrasil.refresh(accessToken, clientToken)
-        
+            yggdrasil.validate(config_file.accessToken)
+            yggdrasil.clientToken = config_file.clientToken
+            yggdrasil.accessToken = config_file.accessToken
+            yggdrasil.display_name = config_file.display_name
+            yggdrasil.uuid = config_file.uuid
+
     game_file = GameFile()
     game_file.get_latest_json_version_url(current_version) # to upgrade, just remove current_version !!NOT TESTED YET!!
     game_file.get_game_json()
     game_file.get_assetindex_json()
-    game_file.get_objects()
     game_file.dl_object()
     game_file.get_client()
     class_path = game_file.get_libraries()
