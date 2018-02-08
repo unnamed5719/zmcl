@@ -1,7 +1,7 @@
 #coding=utf-8
 
 __author__ = 'unnmaed5719'
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 '''
 zero minecraft launcher
@@ -94,7 +94,7 @@ class GameFile:
         self.version_manifest_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
         self.objects_url = 'http://resources.download.minecraft.net/'
 
-    def get_latest_json_version_url(self, ver=None):
+    def get_latest_json_version_url(self, ver):
         version_manifest = json.loads(request.urlopen(self.version_manifest_url).read().decode())
         if ver:
             self.latest_version = ver
@@ -104,8 +104,8 @@ class GameFile:
             if version['id'] == self.latest_version:
                 return version['url']
             
-    def get_game_json(self):
-        url = self.get_latest_json_version_url()
+    def get_game_json(self, ver=None):
+        url = self.get_latest_json_version_url(ver)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
         FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
@@ -346,17 +346,12 @@ if __name__ == '__main__':
     else:    
         config_file = ConfigFile()
         config_file.read_config()
-        accessToken = config_file.accessToken
-        clientToken = config_file.clientToken
         email = config_file.email
-        uuid = config_file.uuid
-        display_name = config_file.display_name
-        current_version = config_file.current_version
         expires_time = config_file.expires_time
 
         if int(expires_time) < time.time():
             yggdrasil = Yggdrasil(email, '')  
-            yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
+            yggdrasil.refresh(config_file.accessToken, config_file.clientToken) 
            
         else:
             yggdrasil = Yggdrasil(email, '')
@@ -366,9 +361,8 @@ if __name__ == '__main__':
             yggdrasil.display_name = config_file.display_name
             yggdrasil.uuid = config_file.uuid
 
-    game_file = GameFile()
-    game_file.get_latest_json_version_url(current_version) # to upgrade, just remove current_version !!NOT TESTED YET!!
-    game_file.get_game_json()
+    game_file = GameFile() 
+    game_file.get_game_json(config_file.current_version) # to upgrade, just remove config_file.current_version
     game_file.get_assetindex_json()
     game_file.dl_object()
     game_file.get_client()
