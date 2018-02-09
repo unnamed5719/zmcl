@@ -220,7 +220,6 @@ class FilesProsess:
                 if percent > 100: # don't know why most time will more than 100,
                     percent = 100 # probably is file size + one percent of the file size.
                 print("Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
-                # every time it call this function, refresh both variate, little bit unnecessary
             request.urlretrieve(url, path, process_bar) 
             print('Done!')                               
     
@@ -318,7 +317,7 @@ def get_memory():
     mem = stat.ullAvailPhys/1073741824 # GiB here
     if mem < 1:
         raise MemoryError('Computer is busy now.')       
-    return '-Xmx'+str(int(mem))+'G' # Yes, not round()
+    return '-Xmx'+str(int(mem))+'G'
 
 def record_cmd(arg):
     proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -341,7 +340,7 @@ if __name__ == '__main__':
         email = input('Email:')
         yggdrasil = Yggdrasil(email, getpass.getpass())  
         current_version = None
-        yggdrasil.authenticate() # sometimes we got 403, don't know why.
+        yggdrasil.authenticate()
         
     else:    
         config_file = ConfigFile()
@@ -390,13 +389,12 @@ if __name__ == '__main__':
         assets_index_name = game_file.asset_index_id,
         auth_uuid = yggdrasil.uuid,
         auth_access_token = yggdrasil.accessToken,
-        user_type = 'mojang', # or legacy 
+        user_type = 'mojang',
         version_type = 'release'
     ) 
     
     final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow '+ \
-        get_memory() + ' -Djava.library.path=' + natives_dir +\
-        ' -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true -cp ' + class_path + \
+        get_memory() + ' -Djava.library.path=' + natives_dir +' -cp ' + class_path + \
         game_file.game_json_file_dir+game_file.latest_version+'.jar ' + mc_arg
     
     print('='*20+'Launching begin'+'='*20)
