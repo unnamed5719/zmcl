@@ -5,9 +5,9 @@ __version__ = '0.2.3'
 
 '''
 zero minecraft launcher
-written in Python using Built-in module
-for windows only, but can launch in other system 
-by doing some modification.
+written in Python using Built-in module.
+for modern vanilla Minecraft.
+for Multiplatform, see multi-platform branch.
 thanks to wiki.vg
 '''
 
