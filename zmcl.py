@@ -1,7 +1,7 @@
 #coding=utf-8
 
 __author__ = 'unnmaed5719'
-__version__ = '0.2.3'
+__version__ = '0.2.3-mp'
 
 '''
 zero minecraft launcher
@@ -15,7 +15,6 @@ thanks to wiki.vg
 import os
 import sys
 import json
-import ctypes
 import zipfile
 import subprocess
 from queue import Queue
@@ -160,14 +159,16 @@ class GameFile:
     def get_libraries(self):
         class_path = ''
         self.cwd = os.getcwd().replace('\\','/')+'/'
+        system = ThisSystem.current_system()
+        dlos = 'natives-'+system
         for library in self.json_game_json['libraries']:
             if 'extract' in library:
                 if 'rules' in library:
-                    if len(library['rules']) == 1: # when it is 2, we download it, just don't know how to handle this
+                    if len(library['rules']) == ThisSystem.library_patch(system):
                         print(library['name'],"isn't for current system, ignore")
                         continue
-                url = library['downloads']['classifiers']['natives-windows']['url']
-                size = library['downloads']['classifiers']['natives-windows']['size']
+                url = library['downloads']['classifiers'][dlos]['url']
+                size = library['downloads']['classifiers'][dlos]['size']
                 _, file_name = os.path.split(url)
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
                 FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
@@ -175,7 +176,7 @@ class GameFile:
                 # os.remove(self.game_json_file_dir+'/natives/'+file_name) 
                 # we don't need it any more, but will cost unnecessary download
             elif 'rules' in library:
-                if len(library['rules']) == 1: 
+                if len(library['rules']) == ThisSystem.library_patch(system):
                     print(library['name'],"isn't for current system, ignore")
                     continue
                 else:
@@ -290,31 +291,65 @@ class ConfigFile:
         self.uuid = self.config_json['uuid']
         self.email = self.config_json['email']
 
-class mem_class(ctypes.Structure):
-    '''get windows memory'''
-    # From https://stackoverflow.com/questions/2017545/
-    _fields_ = [
-        ("dwLength", ctypes.c_ulong),             # sizeof(mem_class)
-        ("dwMemoryLoad", ctypes.c_ulong),         # percent of memory in use
-        ("ullTotalPhys", ctypes.c_ulonglong),     # bytes of physical memory
-        ("ullAvailPhys", ctypes.c_ulonglong),     # free physical memory bytes
-        ("ullTotalPageFile", ctypes.c_ulonglong), # bytes of paging file
-        ("ullAvailPageFile", ctypes.c_ulonglong), # free bytes of paging file
-        ("ullTotalVirtual", ctypes.c_ulonglong),  # user bytes of address space
-        ("ullAvailVirtual", ctypes.c_ulonglong),  # free user bytes
-        ("sullAvailExtendedVirtual", ctypes.c_ulonglong), # always 0
-    ]
-
-    def __init__(self):
-        # have to initialize this to the size of mem_class
-        self.dwLength = ctypes.sizeof(self)
-        super(mem_class, self).__init__()
-
+class ThisSystem:
+    def current_system():
+        name = sys.platform
+        if name == 'win32':
+            return 'windows'
+        elif name == 'darwin':
+            return 'osx'
+        else:
+            return 'linux'
+    
+    def library_patch(name):
+        if name = 'osx':
+            return 2
+        else:
+            return 1
+     
+    def win_memory():
+        import ctypes
+        class mem_class(ctypes.Structure):
+            '''get windows memory'''
+            # From https://stackoverflow.com/questions/2017545/
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),             # sizeof(mem_class)
+                ("dwMemoryLoad", ctypes.c_ulong),         # percent of memory in use
+                ("ullTotalPhys", ctypes.c_ulonglong),     # bytes of physical memory
+                ("ullAvailPhys", ctypes.c_ulonglong),     # free physical memory bytes
+                ("ullTotalPageFile", ctypes.c_ulonglong), # bytes of paging file
+                ("ullAvailPageFile", ctypes.c_ulonglong), # free bytes of paging file
+                ("ullTotalVirtual", ctypes.c_ulonglong),  # user bytes of address space
+                ("ullAvailVirtual", ctypes.c_ulonglong),  # free user bytes
+                ("sullAvailExtendedVirtual", ctypes.c_ulonglong), # always 0
+            ]
         
+            def __init__(self):
+                # have to initialize this to the size of mem_class
+                self.dwLength = ctypes.sizeof(self)
+                super(mem_class, self).__init__()
+        
+        stat = mem_class()
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        mem = stat.ullAvailPhys/1073741824 # GiB here
+        return mem
+        
+    def unix_like_memory():
+        with open("/proc/meminfo") as m:
+            lines = m.readlines()   
+        for line in lines:  
+            if line.split(':')[0] == 'MemFree':
+                var = line.split(':')[1].split()[0]  
+                mem = int(var) * 1048576
+            else:
+                continue
+        return mem
+    
 def get_memory():
-    stat = mem_class()
-    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
-    mem = stat.ullAvailPhys/1073741824 # GiB here
+    if ThisSystem.current_system() == 'windows':
+        mem = ThisSystem.win_memory()
+    else:
+        mem = ThisSystem.unix_like_memory()
     if mem < 1:
         raise MemoryError('Computer is busy now.')       
     return '-Xmx'+str(int(mem))+'G'
@@ -397,7 +432,7 @@ if __name__ == '__main__':
         version_type = 'release'
     ) 
     
-    final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow '+ \
+    final_args = 'javaw -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow '+ \
         get_memory() + ' -Djava.library.path=' + natives_dir +' -cp ' + class_path + \
         game_file.game_json_file_dir+game_file.latest_version+'.jar ' + mc_arg
     
