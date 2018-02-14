@@ -30,28 +30,28 @@ class Yggdrasil:
         self.headers = {'Content-type': 'application/json'}
         self.email = email
         self._password = password
-        
+
     def authenticate(self):
         authenticate_url = self.server_url+'authenticate'
 
         auth_payload = {
-            "agent": {"name": "Minecraft","version": "1"},
+            "agent": {"name": "Minecraft", "version": "1"},
             "username": self.email,
             "password": self._password
         }
-        auth_requ = request.Request(url=authenticate_url, 
-                                    headers=self.headers, 
+        auth_requ = request.Request(url=authenticate_url,
+                                    headers=self.headers,
                                     data=json.dumps(auth_payload).encode())
 
-        auth_resp = json.loads(request.urlopen(auth_requ).read().decode())      
-        
+        auth_resp = json.loads(request.urlopen(auth_requ).read().decode())
+
         self.accessToken = auth_resp['accessToken']
         self.clientToken = auth_resp['clientToken']
         self.uuid = auth_resp['selectedProfile']['id']
         self.display_name = auth_resp['selectedProfile']['name']
         # Looks like 'selectedProfile' is a list version of 'availableProfiles', not sure.
         return True
-        
+
     def refresh(self, accessToken, clientToken):
         refresh_url = self.server_url+'refresh'
 
@@ -59,37 +59,37 @@ class Yggdrasil:
             "accessToken": accessToken,
             "clientToken": clientToken
         }
-        refresh_requ = request.Request(url=refresh_url, 
-                                       headers=self.headers, 
+        refresh_requ = request.Request(url=refresh_url,
+                                       headers=self.headers,
                                        data=json.dumps(refresh_payload).encode())
 
-        refresh_resp = json.loads(request.urlopen(refresh_requ).read().decode())      
+        refresh_resp = json.loads(request.urlopen(refresh_requ).read().decode())
 
         self.accessToken = refresh_resp['accessToken']
         self.clientToken = refresh_resp['clientToken']
         self.uuid = refresh_resp['selectedProfile']['id']
         self.display_name = refresh_resp['selectedProfile']['name']
-        
+
         return True
-       
+
     def validate(self, accessToken):
         validate_url = self.server_url+'validate'
 
         validate_payload = {
             "accessToken": accessToken
         }
-        validate_requ = request.Request(url=validate_url, 
-                                        headers=self.headers, 
+        validate_requ = request.Request(url=validate_url,
+                                        headers=self.headers,
                                         data=json.dumps(validate_payload).encode())
 
         request.urlopen(validate_requ).read().decode()
-        
+
         return True
 
 
 class GameFile:
     '''download game file'''
-    
+
     def __init__(self):
         self.version_manifest_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
         self.objects_url = 'http://resources.download.minecraft.net/'
@@ -103,13 +103,13 @@ class GameFile:
         for version in version_manifest['versions']:
             if version['id'] == self.latest_version:
                 return version['url']
-            
+
     def get_game_json(self, ver):
         url = self.get_latest_json_version_url(ver)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
         FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
-        
+
     def get_assetindex_json(self):
         with open(self.game_json_file_dir+self.latest_version+'.json') as game_json:
             self.json_game_json = json.loads(game_json.read())
@@ -118,7 +118,7 @@ class GameFile:
         size = self.json_game_json['assetIndex']['size']
         FilesProsess.auto_mkdir('.minecraft/assets/indexes/')
         FilesProsess.downloader(asset_index_url, '.minecraft/assets/indexes/'+self.asset_index_id+'.json', size)
-    
+
     def get_objects(self):
         file_url_list = []
         with open('.minecraft/assets/indexes/'+self.asset_index_id+'.json') as objects_file:
@@ -127,61 +127,62 @@ class GameFile:
             hash_string = json_objects['objects'][object]['hash']
             size = json_objects['objects'][object]['size']
             FilesProsess.auto_mkdir('.minecraft/assets/objects/'+hash_string[:2])
-            file_url_list.append([[self.objects_url+hash_string[:2]+'/'+hash_string], [size]])   
-          # FilesProsess.downloader(self.objects_url+hash_string[:2]+'/'+hash_string, 
-                                  # '.minecraft/assets/objects/'+hash_string[:2]+'/'+hash_string, size)
+            file_url_list.append([[self.objects_url+hash_string[:2]+'/'+hash_string], [size]])
+
         return file_url_list
-    
+
     def dl_object(self):
         file_url_list = self.get_objects()
-        
+
         # Create a queue to communicate with the worker threads
         queue = Queue()
-        
+
         # Create 16 worker threads
         for x in range(16):
             worker = DownloadWorker(queue)
-            # Setting daemon to True will let the main thread exit even though the workers are blocking
+            # Setting daemon to True will let the main thread exit
+            # even though the workers are blocking
             worker.daemon = True
             worker.start()
         # Put the tasks into the queue as a tuple
         for file_url in file_url_list:
             queue.put(file_url)
-        
+
         # Causes the main thread to wait for the queue to finish processing all the tasks
         queue.join()
-        
-        
+
     def get_client(self):
         client_url = self.json_game_json['downloads']['client']['url']
         size = self.json_game_json['downloads']['client']['size']
         FilesProsess.downloader(client_url, self.game_json_file_dir+self.latest_version+'.jar', size)
-    
+
     def get_libraries(self):
         class_path = ''
-        self.cwd = os.getcwd().replace('\\','/')+'/'
+        self.cwd = os.getcwd().replace('\\', '/')+'/'
         for library in self.json_game_json['libraries']:
             if 'extract' in library:
                 if 'rules' in library:
-                    if len(library['rules']) == 1: # when it is 2, we download it, just don't know how to handle this
-                        print(library['name'],"isn't for current system, ignore")
+                    if len(library['rules']) == 1:
+                        # when it is 2, we download it, just don't know how to handle this
+                        print(library['name'], "isn't for current system, ignore")
                         continue
                 url = library['downloads']['classifiers']['natives-windows']['url']
                 size = library['downloads']['classifiers']['natives-windows']['size']
                 _, file_name = os.path.split(url)
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
                 FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
-                FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name, self.game_json_file_dir+'natives')
-                # os.remove(self.game_json_file_dir+'/natives/'+file_name) 
+                FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name,
+                                   self.game_json_file_dir+'natives')
+                # os.remove(self.game_json_file_dir+'/natives/'+file_name)
                 # we don't need it any more, but will cost unnecessary download
             elif 'rules' in library:
-                if len(library['rules']) == 1: 
-                    print(library['name'],"isn't for current system, ignore")
+                if len(library['rules']) == 1:
+                    print(library['name'], "isn't for current system, ignore")
                     continue
                 else:
                     url = library['downloads']['artifact']['url']
                     size = library['downloads']['artifact']['size']
-                    full_path = url.replace('https://libraries.minecraft.net','.minecraft/libraries')
+                    full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
                     file_path, _ = os.path.split(full_path)
                     FilesProsess.auto_mkdir(file_path)
                     FilesProsess.downloader(url, full_path, size)
@@ -189,21 +190,21 @@ class GameFile:
             else:
                 url = library['downloads']['artifact']['url']
                 size = library['downloads']['artifact']['size']
-                full_path = url.replace('https://libraries.minecraft.net','.minecraft/libraries')
+                full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
                 file_path, _ = os.path.split(full_path)
                 FilesProsess.auto_mkdir(file_path)
                 FilesProsess.downloader(url, full_path, size)
                 class_path += self.cwd+full_path+';'
         return class_path
-        
+
     def get_arguments(self):
         arguments = self.json_game_json['minecraftArguments']
         main_class = self.json_game_json['mainClass']
-        return main_class+' '+arguments.replace('$','')
+        return main_class+' '+arguments.replace('$', '')
 
 class FilesProsess:
     '''process file'''
-    
+
     def auto_mkdir(dirs):
         if not os.path.exists(dirs):
             os.makedirs(dirs)
@@ -211,18 +212,18 @@ class FilesProsess:
     def downloader(url, path, size=None):# path aka path + file name
         if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)) and os.path.getsize(path):
         # if we got size, check is it same? otherwise check it is non-zero-size
-            print(path,'is already exists, pass')
+            print(path, 'is already exists, pass')
         else:
-            print('Downloading',path) 
+            print('Downloading', path) 
             def process_bar(blocknum, blocksize, totalsize):
                 # https://docs.python.org/3/library/urllib.request.html#urllib.request.retrieve
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100: # don't know why most time will more than 100,
                     percent = 100 # probably is file size + one percent of the file size.
                 print("Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
-            request.urlretrieve(url, path, process_bar) 
-            print('Done!')                               
-    
+            request.urlretrieve(url, path, process_bar)
+            print('Done!')
+
     def unzip(file, file_path):
         if os.path.exists(file): # check if downloaded but haven't unzip
             zf = zipfile.ZipFile(file)
@@ -237,9 +238,9 @@ class FilesProsess:
                 zip_file.extractall(file_path)
 
 class DownloadWorker(Thread):
-    '''parallel downloader''' 
+    '''parallel downloader'''
     # From https://www.jianshu.com/p/d87c951d8416
-    
+
     def __init__(self, queue):
         Thread.__init__(self)
         self.queue = queue
@@ -255,28 +256,28 @@ class DownloadWorker(Thread):
             self.queue.task_done()
 
     def downloader(self, url, size):
-        url=url[0];size=size[0]
+        url = url[0];size = size[0]
         objects_url = 'http://resources.download.minecraft.net'
         path = url.replace(objects_url, '.minecraft/assets/objects')
         if os.path.exists(path) and os.path.getsize(path) == size:
-            print(path,'is already exists, pass')
+            print(path, 'is already exists, pass')
         else:
             _, name = os.path.split(path)
-            print('Downloading',path) 
+            print('Downloading', path)
             def process_bar(blocknum, blocksize, totalsize):
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100:
                     percent = 100
                 print(name, "Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
-            request.urlretrieve(url, path, process_bar) 
-            print('Done!')             
-        
+            request.urlretrieve(url, path, process_bar)
+            print('Done!')
+
 class ConfigFile:
     '''read/write configuration file'''
-    
+
     def __init__(self):
         self.config_file_name = 'config.json'
-    def write_config(self, **kwargs):        
+    def write_config(self, **kwargs):
         with open(self.config_file_name, 'w') as config_file:
             config_file.write(json.dumps(kwargs, indent=4))
     def read_config(self):
@@ -310,13 +311,13 @@ class mem_class(ctypes.Structure):
         self.dwLength = ctypes.sizeof(self)
         super(mem_class, self).__init__()
 
-        
+
 def get_memory():
     stat = mem_class()
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
     mem = stat.ullAvailPhys/1073741824 # GiB here
     if mem < 1:
-        raise MemoryError('Computer is busy now.')       
+        raise MemoryError('Computer is busy now.')
     return '-Xmx'+str(int(mem))+'G'
 
 def record_cmd(arg):
@@ -338,11 +339,11 @@ if __name__ == '__main__':
     import getpass
     if not os.path.exists('.minecraft'):
         email = input('Email:')
-        yggdrasil = Yggdrasil(email, getpass.getpass())  
+        yggdrasil = Yggdrasil(email, getpass.getpass())
         current_version = None
         yggdrasil.authenticate()
-        
-    else:    
+
+    else:
         config_file = ConfigFile()
         config_file.read_config()
         email = config_file.email
@@ -353,9 +354,9 @@ if __name__ == '__main__':
                 current_version = None
 
         if int(expires_time) < time.time():
-            yggdrasil = Yggdrasil(email, '')  
-            yggdrasil.refresh(config_file.accessToken, config_file.clientToken) 
-           
+            yggdrasil = Yggdrasil(email, '')
+            yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
+
         else:
             yggdrasil = Yggdrasil(email, '')
             yggdrasil.validate(config_file.accessToken)
@@ -364,16 +365,16 @@ if __name__ == '__main__':
             yggdrasil.display_name = config_file.display_name
             yggdrasil.uuid = config_file.uuid
 
-    game_file = GameFile() 
+    game_file = GameFile()
     game_file.get_game_json(current_version)
     game_file.get_assetindex_json()
     game_file.dl_object()
     game_file.get_client()
     class_path = game_file.get_libraries()
     arguments = game_file.get_arguments()
-    
+
     natives_dir = game_file.cwd+game_file.game_json_file_dir+'natives'
-    
+
     config_file = ConfigFile()
     config_file.write_config(
         clientToken = yggdrasil.clientToken,
@@ -384,7 +385,7 @@ if __name__ == '__main__':
         current_version = game_file.latest_version,
         expires_time = str(int(time.time()+2592000)) # a month
     )
-    
+
     mc_arg = arguments.format(
         auth_player_name = yggdrasil.display_name,
         version_name =  game_file.latest_version,
@@ -395,12 +396,11 @@ if __name__ == '__main__':
         auth_access_token = yggdrasil.accessToken,
         user_type = 'mojang',
         version_type = 'release'
-    ) 
-    
+    )
+
     final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow '+ \
         get_memory() + ' -Djava.library.path=' + natives_dir +' -cp ' + class_path + \
         game_file.game_json_file_dir+game_file.latest_version+'.jar ' + mc_arg
-    
+
     print('='*20+'Launching begin'+'='*20)
     execute_cmd(final_args)
-
