@@ -104,7 +104,7 @@ class GameFile:
             if version['id'] == self.latest_version:
                 return version['url']
             
-    def get_game_json(self, ver=None):
+    def get_game_json(self, ver):
         url = self.get_latest_json_version_url(ver)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
@@ -327,8 +327,8 @@ def record_cmd(arg):
             break
         yield out.rstrip()
 
-encoding = sys.stdout.encoding
 def execute_cmd(arg):
+    encoding = sys.stdout.encoding
     for i in record_cmd(arg):
         print(i.decode(encoding))
 
@@ -347,6 +347,10 @@ if __name__ == '__main__':
         config_file.read_config()
         email = config_file.email
         expires_time = config_file.expires_time
+        current_version = config_file.current_version
+        if len(sys.argv) > 1:
+            if sys.argv[1] == '--upgrade-game':
+                current_version = None
 
         if int(expires_time) < time.time():
             yggdrasil = Yggdrasil(email, '')  
@@ -361,7 +365,7 @@ if __name__ == '__main__':
             yggdrasil.uuid = config_file.uuid
 
     game_file = GameFile() 
-    game_file.get_game_json(config_file.current_version) # to upgrade, just remove config_file.current_version
+    game_file.get_game_json(current_version)
     game_file.get_assetindex_json()
     game_file.dl_object()
     game_file.get_client()
