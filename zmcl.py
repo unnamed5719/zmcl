@@ -140,8 +140,7 @@ class GameFile:
         # Create 16 worker threads
         for x in range(16):
             worker = DownloadWorker(queue)
-            # Setting daemon to True will let the main thread exit
-            # even though the workers are blocking
+            # Setting daemon to True will let the main thread exit even though the workers are blocking
             worker.daemon = True
             worker.start()
         # Put the tasks into the queue as a tuple
@@ -171,8 +170,7 @@ class GameFile:
                 _, file_name = os.path.split(url)
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
                 FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
-                FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name,
-                                   self.game_json_file_dir+'natives')
+                FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name, self.game_json_file_dir+'natives')
                 # os.remove(self.game_json_file_dir+'/natives/'+file_name)
                 # we don't need it any more, but will cost unnecessary download
             elif 'rules' in library:
@@ -212,7 +210,7 @@ class FilesProsess:
     def downloader(url, path, size=None):# path aka path + file name
         if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)) and os.path.getsize(path):
         # if we got size, check is it same? otherwise check it is non-zero-size
-            print(path, 'is already exists, pass')
+            print(path, 'is already exists, pass', end='\r')
         else:
             print('Downloading', path) 
             def process_bar(blocknum, blocksize, totalsize):
@@ -229,7 +227,7 @@ class FilesProsess:
             zf = zipfile.ZipFile(file)
             for zip_list in zf.filelist:
                 if os.path.exists(file_path+'/'+zip_list.orig_filename):
-                    print(zip_list.orig_filename, 'is already extracted, pass')
+                    print(zip_list.orig_filename, 'is already extracted, pass', end='\r')
                 else:
                     with zipfile.ZipFile(file) as zip_file:
                         zip_file.extractall(file_path)
@@ -260,7 +258,7 @@ class DownloadWorker(Thread):
         objects_url = 'http://resources.download.minecraft.net'
         path = url.replace(objects_url, '.minecraft/assets/objects')
         if os.path.exists(path) and os.path.getsize(path) == size:
-            print(path, 'is already exists, pass')
+            print(path, 'is already exists, pass', end='\r')
         else:
             _, name = os.path.split(path)
             print('Downloading', path)
@@ -268,7 +266,7 @@ class DownloadWorker(Thread):
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100:
                     percent = 100
-                print(name, "Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
+                print("Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
             request.urlretrieve(url, path, process_bar)
             print('Done!')
 
@@ -359,11 +357,16 @@ if __name__ == '__main__':
 
         else:
             yggdrasil = Yggdrasil(email, '')
-            yggdrasil.validate(config_file.accessToken)
-            yggdrasil.clientToken = config_file.clientToken
-            yggdrasil.accessToken = config_file.accessToken
-            yggdrasil.display_name = config_file.display_name
-            yggdrasil.uuid = config_file.uuid
+            try:
+                yggdrasil.validate(config_file.accessToken)
+            except:
+                print('invalidated token ,refresh')
+                yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
+            else:
+                yggdrasil.clientToken = config_file.clientToken
+                yggdrasil.accessToken = config_file.accessToken
+                yggdrasil.display_name = config_file.display_name
+                yggdrasil.uuid = config_file.uuid
 
     game_file = GameFile()
     game_file.get_game_json(current_version)
