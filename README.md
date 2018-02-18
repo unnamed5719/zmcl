@@ -1,8 +1,9 @@
 # zmcl
 Minecraft launcher 
 
-~~TODO:~~ 
-- [x] Downloading Multi files at the same time 
+TODO:    
+ - [x] Downloading Multi files at the same time     
+ - [ ] 1.13 support     
 
 To upgrade the game, just add `--upgrade-game` argument
 
