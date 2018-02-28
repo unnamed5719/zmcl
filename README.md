@@ -1,5 +1,5 @@
 # zmcl
-Minecraft launcher 
+Launcher for modern vanilla Minecraft, all using built-in library
 
 ~~TODO:~~
  - [x] Downloading Multi files at the same time    
