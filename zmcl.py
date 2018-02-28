@@ -388,7 +388,7 @@ if __name__ == '__main__':
         if args.upgrade_game:
             current_version = None        
         
-        yggdrasil = Yggdrasil('', '')
+        yggdrasil = Yggdrasil(email, '')
         
         if int(expires_time) < time.time():
             yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
