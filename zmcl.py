@@ -1,7 +1,7 @@
 #coding=utf-8
 
 __author__ = 'unnmaed5719'
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 
 '''
 zero minecraft launcher
@@ -111,8 +111,8 @@ class GameFile:
         FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
 
     def get_assetindex_json(self):
-        with open(self.game_json_file_dir+self.latest_version+'.json') as game_json:
-            self.json_game_json = json.loads(game_json.read())
+        with open(self.game_json_file_dir+self.latest_version+'.json') as game_json_file:
+            self.json_game_json = json.loads(game_json_file.read())
         self.asset_index_id = self.json_game_json['assetIndex']['id']
         asset_index_url = self.json_game_json['assetIndex']['url']
         size = self.json_game_json['assetIndex']['size']
@@ -159,7 +159,7 @@ class GameFile:
         class_path = ''
         self.cwd = os.getcwd().replace('\\', '/')+'/'
         for library in self.json_game_json['libraries']:
-            if 'extract' in library:
+            if 'natives' in library:
                 if 'rules' in library:
                     if len(library['rules']) == 1:
                         # when it is 2, we download it, just don't know how to handle this
@@ -196,7 +196,15 @@ class GameFile:
         return class_path
 
     def get_arguments(self):
-        arguments = self.json_game_json['minecraftArguments']
+        if 'minecraftArguments' in self.json_game_json:
+            arguments = self.json_game_json['minecraftArguments']
+        else: # 1.13 new arguments is list
+            a=[]
+            for i in self.json_game_json['arguments']['game']:
+                if isinstance(i, str):
+                    a.append(i)
+            arguments = ' '.join(a)
+        
         main_class = self.json_game_json['mainClass']
         return main_class+' '+arguments.replace('$', '')
 
@@ -218,9 +226,9 @@ class FilesProsess:
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100: # don't know why most time will more than 100,
                     percent = 100 # probably is file size + one percent of the file size.
-                print("Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
+                print("%.2f%% %.2f MB" %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
-            print('Done!')
+            print('Done!   ')
 
     def unzip(file, file_path):
         if os.path.exists(file): # check if downloaded but haven't unzip
@@ -266,9 +274,9 @@ class DownloadWorker(Thread):
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100:
                     percent = 100
-                print("Total %.2f MB  %.2f%%." %(totalsize/1048576, percent), end='\r')
+                print("%.2f%%, %.2f MB" %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
-            print('Done!')
+            print('Done!   ')
 
 class ConfigFile:
     '''read/write configuration file'''
@@ -335,28 +343,29 @@ def execute_cmd(arg):
 if __name__ == '__main__':
     import time
     import getpass
-    if not os.path.exists('.minecraft'):
+    
+    config_file = ConfigFile()
+    game_file = GameFile()
+    
+    if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
         yggdrasil = Yggdrasil(email, getpass.getpass())
         current_version = None
         yggdrasil.authenticate()
 
     else:
-        config_file = ConfigFile()
         config_file.read_config()
         email = config_file.email
         expires_time = config_file.expires_time
         current_version = config_file.current_version
-        if len(sys.argv) > 1:
-            if sys.argv[1] == '--upgrade-game':
-                current_version = None
-
+        if len(sys.argv) > 1 and sys.argv[1] == '--upgrade-game':
+            current_version = None
+        
+        yggdrasil = Yggdrasil(email, '')
+        
         if int(expires_time) < time.time():
-            yggdrasil = Yggdrasil(email, '')
             yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
-
         else:
-            yggdrasil = Yggdrasil(email, '')
             try:
                 yggdrasil.validate(config_file.accessToken)
             except:
@@ -368,17 +377,8 @@ if __name__ == '__main__':
                 yggdrasil.display_name = config_file.display_name
                 yggdrasil.uuid = config_file.uuid
 
-    game_file = GameFile()
     game_file.get_game_json(current_version)
-    game_file.get_assetindex_json()
-    game_file.dl_object()
-    game_file.get_client()
-    class_path = game_file.get_libraries()
-    arguments = game_file.get_arguments()
-
-    natives_dir = game_file.cwd+game_file.game_json_file_dir+'natives'
-
-    config_file = ConfigFile()
+    
     config_file.write_config(
         clientToken = yggdrasil.clientToken,
         accessToken = yggdrasil.accessToken,
@@ -388,6 +388,14 @@ if __name__ == '__main__':
         current_version = game_file.latest_version,
         expires_time = str(int(time.time()+2592000)) # a month
     )
+    
+    game_file.get_assetindex_json()
+    game_file.dl_object()
+    game_file.get_client()
+    class_path = game_file.get_libraries()
+    arguments = game_file.get_arguments()
+
+    natives_dir = game_file.cwd+game_file.game_json_file_dir+'natives'
 
     mc_arg = arguments.format(
         auth_player_name = yggdrasil.display_name,
@@ -398,12 +406,12 @@ if __name__ == '__main__':
         auth_uuid = yggdrasil.uuid,
         auth_access_token = yggdrasil.accessToken,
         user_type = 'mojang',
-        version_type = 'release'
+        version_type = game_file.json_game_json['type']
     )
 
-    final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow '+ \
-        get_memory() + ' -Djava.library.path=' + natives_dir +' -cp ' + class_path + \
-        game_file.game_json_file_dir+game_file.latest_version+'.jar ' + mc_arg
+    final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
+        '-XX:HeapDumpPath=minecraft.heapdump ' + get_memory() + ' -Djava.library.path=' + natives_dir + \
+        ' -cp ' + class_path + game_file.game_json_file_dir + game_file.latest_version+'.jar ' + mc_arg
 
     print('='*20+'Launching begin'+'='*20)
     execute_cmd(final_args)
