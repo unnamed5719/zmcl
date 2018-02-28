@@ -208,6 +208,7 @@ class GameFile:
         main_class = self.json_game_json['mainClass']
         return main_class+' '+arguments.replace('$', '')
 
+
 class FilesProsess:
     '''process file'''
 
@@ -226,7 +227,7 @@ class FilesProsess:
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100: # don't know why most time will more than 100,
                     percent = 100 # probably is file size + one percent of the file size.
-                print("%.2f%% %.2f MB" %(percent, totalsize/1048576), end='\r')
+                print('%.2f%% %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
             print('Done!   ')
 
@@ -242,6 +243,7 @@ class FilesProsess:
         else: # how to avoid copy and paste like this?
             with zipfile.ZipFile(file) as zip_file:
                 zip_file.extractall(file_path)
+
 
 class DownloadWorker(Thread):
     '''parallel downloader'''
@@ -262,21 +264,21 @@ class DownloadWorker(Thread):
             self.queue.task_done()
 
     def downloader(self, url, size):
-        url = url[0];size = size[0]
+        url = url[0]; size = size[0]
         objects_url = 'http://resources.download.minecraft.net'
         path = url.replace(objects_url, '.minecraft/assets/objects')
         if os.path.exists(path) and os.path.getsize(path) == size:
             print(path, 'is already exists, pass', end='\r')
         else:
             _, name = os.path.split(path)
-            print('Downloading', path)
             def process_bar(blocknum, blocksize, totalsize):
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100:
                     percent = 100
-                print("%.2f%%, %.2f MB" %(percent, totalsize/1048576), end='\r')
+                print(name, '%.2f%%, %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
             print('Done!   ')
+
 
 class ConfigFile:
     '''read/write configuration file'''
@@ -296,6 +298,7 @@ class ConfigFile:
         self.expires_time = self.config_json['expires_time']
         self.uuid = self.config_json['uuid']
         self.email = self.config_json['email']
+
 
 class mem_class(ctypes.Structure):
     '''get windows memory'''
@@ -343,25 +346,49 @@ def execute_cmd(arg):
 if __name__ == '__main__':
     import time
     import getpass
-    
+    import argparse
+
+    parser = argparse.ArgumentParser()
     config_file = ConfigFile()
     game_file = GameFile()
     
     if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
         yggdrasil = Yggdrasil(email, getpass.getpass())
-        current_version = None
         yggdrasil.authenticate()
-
+        current_version = None
+        
     else:
         config_file.read_config()
         email = config_file.email
         expires_time = config_file.expires_time
         current_version = config_file.current_version
-        if len(sys.argv) > 1 and sys.argv[1] == '--upgrade-game':
-            current_version = None
         
-        yggdrasil = Yggdrasil(email, '')
+        
+        parser.add_argument('--upgrade-game', '-u' ,dest='upgrade_game', help='upgrade the game to latest release')
+        parser.add_argument('--multi-version', '-m', dest='multi_version', help='isolate each version')
+        parser.add_argument('--screen-size', '-s', dest='screen_size', help='custom screen size, [WIDTH]x[HEIGHT]')
+        parser.add_argument('--join-server', '-j', dest='join_server',help='join a server when launched, [IP](:[PORT])')
+
+        args = parser.parse_args()
+        custom_arguments = ' '
+        
+        if args.screen_size:
+            width, height = args.screen_size.split('x')
+            custom_arguments += '--width  {} --height {} '.format(width, height)
+        
+        if args.join_server:
+            s = args.join_server.split(':')
+            if len(s) == 1:
+                ip = s[0]; port = '25565'
+            else:
+                ip, port = s
+            custom_arguments += '--server {} --port {} '.format(ip, port)
+        
+        if args.upgrade_game:
+            current_version = None        
+        
+        yggdrasil = Yggdrasil('', '')
         
         if int(expires_time) < time.time():
             yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
@@ -397,17 +424,22 @@ if __name__ == '__main__':
 
     natives_dir = game_file.cwd+game_file.game_json_file_dir+'natives'
 
+    if args.multi_version:
+        game_dir = game_file.cwd+'/.minecraft/version/'+game_file.latest_version
+    else:
+        game_dir = game_file.cwd+'/.minecraft'
+    
     mc_arg = arguments.format(
         auth_player_name = yggdrasil.display_name,
         version_name =  game_file.latest_version,
-        game_directory = game_file.cwd+'/.minecraft', # or +/version/{version} for multi-version
+        game_directory = game_dir, 
         assets_root = game_file.cwd+'/.minecraft/assets',
         assets_index_name = game_file.asset_index_id,
         auth_uuid = yggdrasil.uuid,
         auth_access_token = yggdrasil.accessToken,
         user_type = 'mojang',
         version_type = game_file.json_game_json['type']
-    )
+    ) + custom_arguments
 
     final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
         '-XX:HeapDumpPath=minecraft.heapdump ' + get_memory() + ' -Djava.library.path=' + natives_dir + \
