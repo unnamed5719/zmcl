@@ -4,6 +4,8 @@ __author__ = 'unnmaed5719'
 __version__ = '0.2.4'
 
 '''
+https://github.com/unnamed5719/zmcl
+LICENSE:MIT
 zero minecraft launcher
 written in Python using Built-in module.
 for modern vanilla Minecraft.
@@ -105,7 +107,7 @@ class GameFile:
                 return version['url']
 
     def get_game_json(self, ver, ver_type):
-        url = self.get_latest_json_version_url(ver, type)
+        url = self.get_latest_json_version_url(ver, ver_type)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
         FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
@@ -352,10 +354,10 @@ if __name__ == '__main__':
     config_file = ConfigFile()
     game_file = GameFile()
     
-    parser.add_argument('-u', '--upgrade-game', choices=['release','snapshot'], default='release',
-                        help='upgrade to latest release(/snapshot)')
+    parser.add_argument('-u', '--upgrade-game', choices=['release','snapshot'],
+                        help='upgrade to latest release/snapshot')
     parser.add_argument('-m', '--multi-version', action='store_true', help='isolate each version')
-    parser.add_argument('-r', '--re-login', action='store_true', help='re login account')
+    parser.add_argument('-r', '--re-login', action='store_true', help='relogin account')
     parser.add_argument('-s', '--screen-size', help='custom screen size, [WIDTH]x[HEIGHT]')
     parser.add_argument('-j', '--join-server', help='join a server when launched, [IP](:[PORT])')
     
@@ -376,7 +378,7 @@ if __name__ == '__main__':
         
         if args.screen_size:
             width, height = args.screen_size.split('x')
-            custom_arguments += '--width  {} --height {} '.format(width, height)
+            custom_arguments += '--width {} --height {} '.format(width, height)
         
         if args.join_server:
             s = args.join_server.split(':')
