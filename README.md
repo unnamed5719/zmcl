@@ -16,10 +16,12 @@ optional arguments:
   -u {release,snapshot}, --upgrade-game {release,snapshot}
                         upgrade to latest release(/snapshot)
   -m, --multi-version   isolate each version
-  -r, --re-login        re login account
+  -r, --re-login        relogin account
   -s SCREEN_SIZE, --screen-size SCREEN_SIZE
                         custom screen size, [WIDTH]x[HEIGHT]
   -j JOIN_SERVER, --join-server JOIN_SERVER
                         join a server when launched, [IP](:[PORT])
 ```
 For Multiplatform, see multi-platform branch.
+# licenes
+MIT
