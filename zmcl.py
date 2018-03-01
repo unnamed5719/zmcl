@@ -94,18 +94,18 @@ class GameFile:
         self.version_manifest_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
         self.objects_url = 'http://resources.download.minecraft.net/'
 
-    def get_latest_json_version_url(self, ver):
+    def get_latest_json_version_url(self, ver, ver_type):
         version_manifest = json.loads(request.urlopen(self.version_manifest_url).read().decode())
         if ver:
             self.latest_version = ver
         else:
-            self.latest_version = version_manifest['latest']['release']
+            self.latest_version = version_manifest['latest'][ver_type]
         for version in version_manifest['versions']:
             if version['id'] == self.latest_version:
                 return version['url']
 
-    def get_game_json(self, ver):
-        url = self.get_latest_json_version_url(ver)
+    def get_game_json(self, ver, ver_type):
+        url = self.get_latest_json_version_url(ver, type)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
         FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
@@ -277,7 +277,7 @@ class DownloadWorker(Thread):
                     percent = 100
                 print(name, '%.2f%%, %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
-            print('Done!   ')
+            print('Done!')
 
 
 class ConfigFile:
@@ -325,8 +325,7 @@ def get_memory():
     stat = mem_class()
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
     mem = stat.ullAvailPhys/1073741824 # GiB here
-    if mem < 1:
-        raise MemoryError('Computer is busy now.')
+    if mem < 1: raise MemoryError('Computer is busy now.')
     return '-Xmx'+str(int(mem))+'G'
 
 def record_cmd(arg):
@@ -348,9 +347,17 @@ if __name__ == '__main__':
     import getpass
     import argparse
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='zero minecraft launcher v{}, by {}'.format(
+                                    __version__, __author__))
     config_file = ConfigFile()
     game_file = GameFile()
+    
+    parser.add_argument('-u', '--upgrade-game', choices=['release','snapshot'], default='release',
+                        help='upgrade to latest release(/snapshot)')
+    parser.add_argument('-m', '--multi-version', action='store_true', help='isolate each version')
+    parser.add_argument('-r', '--re-login', action='store_true', help='re login account')
+    parser.add_argument('-s', '--screen-size', help='custom screen size, [WIDTH]x[HEIGHT]')
+    parser.add_argument('-j', '--join-server', help='join a server when launched, [IP](:[PORT])')
     
     if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
@@ -364,12 +371,6 @@ if __name__ == '__main__':
         expires_time = config_file.expires_time
         current_version = config_file.current_version
         
-        
-        parser.add_argument('--upgrade-game', '-u' ,dest='upgrade_game', help='upgrade the game to latest release')
-        parser.add_argument('--multi-version', '-m', dest='multi_version', help='isolate each version')
-        parser.add_argument('--screen-size', '-s', dest='screen_size', help='custom screen size, [WIDTH]x[HEIGHT]')
-        parser.add_argument('--join-server', '-j', dest='join_server',help='join a server when launched, [IP](:[PORT])')
-
         args = parser.parse_args()
         custom_arguments = ' '
         
@@ -385,26 +386,37 @@ if __name__ == '__main__':
                 ip, port = s
             custom_arguments += '--server {} --port {} '.format(ip, port)
         
+        version_type = 'release'
         if args.upgrade_game:
+            version_type = args.upgrade_game
             current_version = None        
         
-        yggdrasil = Yggdrasil(email, '')
-        
-        if int(expires_time) < time.time():
-            yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
+        if args.re_login:
+            yggdrasil = Yggdrasil(email, getpass.getpass())
+            yggdrasil.authenticate()
+            
         else:
-            try:
-                yggdrasil.validate(config_file.accessToken)
-            except:
-                print('invalidated token ,refresh')
+            yggdrasil = Yggdrasil(email, '')
+        
+            if int(expires_time) < time.time():
                 yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
             else:
-                yggdrasil.clientToken = config_file.clientToken
-                yggdrasil.accessToken = config_file.accessToken
-                yggdrasil.display_name = config_file.display_name
-                yggdrasil.uuid = config_file.uuid
-
-    game_file.get_game_json(current_version)
+                try:
+                    yggdrasil.validate(config_file.accessToken)
+                except:
+                    print('invalidated token ,refresh')
+                    try:
+                        yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
+                    except:
+                        print("Someting is not quite right, try '--re-login'")
+                        exit(1)
+                else:
+                    yggdrasil.clientToken = config_file.clientToken
+                    yggdrasil.accessToken = config_file.accessToken
+                    yggdrasil.display_name = config_file.display_name
+                    yggdrasil.uuid = config_file.uuid
+        
+    game_file.get_game_json(current_version, version_type)
     
     config_file.write_config(
         clientToken = yggdrasil.clientToken,
