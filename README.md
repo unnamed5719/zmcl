@@ -1,10 +1,10 @@
 # zmcl
 Launcher for modern vanilla Minecraft, all using built-in library
 
-~~TODO:~~
+TODO:
  - [x] Downloading Multi files at the same time    
  - [x] 1.13 support     
-
+ - [ ] Multiplatform support    
 ```
 usage: zmcl.py [-h] [-u {release,snapshot}] [-m] [-r] [-s SCREEN_SIZE]
                [-j JOIN_SERVER]
@@ -22,6 +22,6 @@ optional arguments:
   -j JOIN_SERVER, --join-server JOIN_SERVER
                         join a server when launched, [IP](:[PORT])
 ```
-For Multiplatform, see multi-platform branch.
+
 # licenes
 MIT
