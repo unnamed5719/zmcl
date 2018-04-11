@@ -9,7 +9,6 @@ LICENSE:MIT
 zero minecraft launcher
 written in Python using Built-in module.
 for modern vanilla Minecraft.
-for Multiplatform, see multi-platform branch.
 thanks to wiki.vg
 '''
 
