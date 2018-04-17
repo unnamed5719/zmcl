@@ -1,7 +1,7 @@
 #coding=utf-8
 
 __author__ = 'unnmaed5719'
-__version__ = '0.2.4'
+__version__ = '0.2.5'
 
 '''
 https://github.com/unnamed5719/zmcl
@@ -16,7 +16,6 @@ thanks to wiki.vg
 import os
 import sys
 import json
-import ctypes
 import zipfile
 import subprocess
 from queue import Queue
@@ -26,6 +25,7 @@ from threading import Thread
 
 class Yggdrasil:
     '''account verification and keeping token available'''
+
     def __init__(self, email, password):
         self.server_url = 'https://authserver.mojang.com/'
         self.headers = {'Content-type': 'application/json'}
@@ -96,7 +96,17 @@ class GameFile:
         self.objects_url = 'http://resources.download.minecraft.net/'
 
     def get_latest_json_version_url(self, ver, ver_type):
-        version_manifest = json.loads(request.urlopen(self.version_manifest_url).read().decode())
+        if not os.path.exists('.minecraft/version_manifest.json'):
+            FilesProsess.local_dler(self,version_manifest_url,'.minecraft/version_manifest.json')
+        else:
+            old_size = os.path.getsize('.minecraft/version_manifest.json')
+            new_size = FilesProsess.header(self.version_manifest_url)
+            if new_size != old_size:
+                print('update found')
+                FilesProsess.local_dler(self,version_manifest_url,'.minecraft/version_manifest.json')
+
+        with open('.minecraft/version_manifest.json') as file:
+            version_manifest = json.loads(file.read())
         if ver:
             self.latest_version = ver
         else:
@@ -109,7 +119,7 @@ class GameFile:
         url = self.get_latest_json_version_url(ver, ver_type)
         FilesProsess.auto_mkdir('.minecraft/versions/'+self.latest_version)
         self.game_json_file_dir = '.minecraft/versions/'+self.latest_version+'/'
-        FilesProsess.downloader(url, self.game_json_file_dir+self.latest_version+'.json')
+        FilesProsess.local_dler(url, self.game_json_file_dir+self.latest_version+'.json')
 
     def get_assetindex_json(self):
         with open(self.game_json_file_dir+self.latest_version+'.json') as game_json_file:
@@ -159,38 +169,39 @@ class GameFile:
     def get_libraries(self):
         class_path = ''
         self.cwd = os.getcwd().replace('\\', '/')+'/'
+        system, patch = ThisSystem.current_system()
+        dlos = 'natives-'+system
         for library in self.json_game_json['libraries']:
             if 'natives' in library:
                 if 'rules' in library:
-                    if len(library['rules']) == 1:
+                    if len(library['rules']) == patch:
                         # when it is 2, we download it, just don't know how to handle this
                         print(library['name'], "isn't for current system, ignore")
                         continue
-                url = library['downloads']['classifiers']['natives-windows']['url']
-                size = library['downloads']['classifiers']['natives-windows']['size']
-                _, file_name = os.path.split(url)
+                url = library['downloads']['classifiers'][dlos]['url']
+                size = library['downloads']['classifiers'][dlos]['size']
+                file_name = os.path.split(url)[1]
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
                 FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
                 FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name, self.game_json_file_dir+'natives')
                 # os.remove(self.game_json_file_dir+'/natives/'+file_name)
                 # we don't need it any more, but will cost unnecessary download
             elif 'rules' in library:
-                if len(library['rules']) == 1:
+                if len(library['rules']) == patch:
                     print(library['name'], "isn't for current system, ignore")
                     continue
-                else:
-                    url = library['downloads']['artifact']['url']
-                    size = library['downloads']['artifact']['size']
-                    full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
-                    file_path, _ = os.path.split(full_path)
-                    FilesProsess.auto_mkdir(file_path)
-                    FilesProsess.downloader(url, full_path, size)
-                    class_path += self.cwd+full_path+';'
+                url = library['downloads']['artifact']['url']
+                size = library['downloads']['artifact']['size']
+                full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
+                file_path = os.path.split(full_path)[0]
+                FilesProsess.auto_mkdir(file_path)
+                FilesProsess.downloader(url, full_path, size)
+                class_path += self.cwd+full_path+';'
             else:
                 url = library['downloads']['artifact']['url']
                 size = library['downloads']['artifact']['size']
                 full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
-                file_path, _ = os.path.split(full_path)
+                file_path = os.path.split(full_path)[0]
                 FilesProsess.auto_mkdir(file_path)
                 FilesProsess.downloader(url, full_path, size)
                 class_path += self.cwd+full_path+';'
@@ -216,10 +227,17 @@ class FilesProsess:
     def auto_mkdir(dirs):
         if not os.path.exists(dirs):
             os.makedirs(dirs)
+    
+    def header(url):
+        return int(request.urlopen(url).info()['Content-Length'])
 
-    def downloader(url, path, size=None):# path aka path + file name
-        if os.path.exists(path) and os.path.getsize(path) == (size if size else os.path.getsize(path)) and os.path.getsize(path):
-        # if we got size, check is it same? otherwise check it is non-zero-size
+    def local_dler(url, path):
+        with open(path, 'wb') as file:
+            file.write(request.urlopen(url).read())
+        
+    def downloader(url, path, size): # path aka path + file name
+        if os.path.exists(path) and os.path.getsize(path) == size:
+        # if we got size, check is it same
             print(path, 'is already exists, pass', end='\r')
         else:
             print('Downloading', path) 
@@ -230,7 +248,7 @@ class FilesProsess:
                     percent = 100 # probably is file size + one percent of the file size.
                 print('%.2f%% %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
-            print('Done!   ')
+            print('Done!  ')
 
     def unzip(file, file_path):
         if os.path.exists(file): # check if downloaded but haven't unzip
@@ -271,7 +289,7 @@ class DownloadWorker(Thread):
         if os.path.exists(path) and os.path.getsize(path) == size:
             print(path, 'is already exists, pass', end='\r')
         else:
-            _, name = os.path.split(path)
+            name = os.path.split(path)[1]
             def process_bar(blocknum, blocksize, totalsize):
                 percent = 100 * blocknum * blocksize / totalsize
                 if percent > 100:
@@ -291,46 +309,74 @@ class ConfigFile:
             config_file.write(json.dumps(kwargs, indent=4))
     def read_config(self):
         with open(self.config_file_name, 'r') as config_file:
-            self.config_json = json.loads(config_file.read())
-        self.clientToken = self.config_json['clientToken']
-        self.accessToken = self.config_json['accessToken']
-        self.display_name = self.config_json['display_name']
-        self.current_version = self.config_json['current_version']
-        self.expires_time = self.config_json['expires_time']
-        self.uuid = self.config_json['uuid']
-        self.email = self.config_json['email']
+            config_json = json.loads(config_file.read())
+        self.clientToken = config_json['clientToken']
+        self.accessToken = config_json['accessToken']
+        self.display_name = config_json['display_name']
+        self.current_version = config_json['current_version']
+        self.expires_time = config_json['expires_time']
+        self.uuid = config_json['uuid']
+        self.email = config_json['email']
 
 
-class mem_class(ctypes.Structure):
-    '''get windows memory'''
-    # From https://stackoverflow.com/questions/2017545/
-    _fields_ = [
-        ("dwLength", ctypes.c_ulong),             # sizeof(mem_class)
-        ("dwMemoryLoad", ctypes.c_ulong),         # percent of memory in use
-        ("ullTotalPhys", ctypes.c_ulonglong),     # bytes of physical memory
-        ("ullAvailPhys", ctypes.c_ulonglong),     # free physical memory bytes
-        ("ullTotalPageFile", ctypes.c_ulonglong), # bytes of paging file
-        ("ullAvailPageFile", ctypes.c_ulonglong), # free bytes of paging file
-        ("ullTotalVirtual", ctypes.c_ulonglong),  # user bytes of address space
-        ("ullAvailVirtual", ctypes.c_ulonglong),  # free user bytes
-        ("sullAvailExtendedVirtual", ctypes.c_ulonglong), # always 0
-    ]
-
-    def __init__(self):
-        # have to initialize this to the size of mem_class
-        self.dwLength = ctypes.sizeof(self)
-        super(mem_class, self).__init__()
+class ThisSystem:
+    '''about system'''
+    def current_system():
+        name = sys.platform
+        if name == 'win32':
+            return 'windows', 1
+        elif name == 'darwin':
+            return 'osx', 2
+        else:
+            return 'linux', 1
+    
+    def win_memory():
+        import ctypes
+        class mem_class(ctypes.Structure):
+            '''get windows memory'''
+            # From https://stackoverflow.com/questions/2017545/
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),             # sizeof(mem_class)
+                ("dwMemoryLoad", ctypes.c_ulong),         # percent of memory in use
+                ("ullTotalPhys", ctypes.c_ulonglong),     # bytes of physical memory
+                ("ullAvailPhys", ctypes.c_ulonglong),     # free physical memory bytes
+                ("ullTotalPageFile", ctypes.c_ulonglong), # bytes of paging file
+                ("ullAvailPageFile", ctypes.c_ulonglong), # free bytes of paging file
+                ("ullTotalVirtual", ctypes.c_ulonglong),  # user bytes of address space
+                ("ullAvailVirtual", ctypes.c_ulonglong),  # free user bytes
+                ("sullAvailExtendedVirtual", ctypes.c_ulonglong), # always 0
+            ]
+        
+            def __init__(self):
+                # have to initialize this to the size of mem_class
+                self.dwLength = ctypes.sizeof(self)
+                super(mem_class, self).__init__()
+        
+        stat = mem_class()
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        mem = stat.ullAvailPhys/1073741824 # GiB here
+        return mem
+        
+    def unix_like_memory():
+        with open("/proc/meminfo") as m:
+            lines = m.readlines()   
+        for line in lines:  
+            if line.split(':')[0] == 'MemFree':
+                var = line.split(':')[1].split()[0]  
+                mem = int(var)/1048576 # GiB here
+                return mem
 
 
 def get_memory():
-    stat = mem_class()
-    ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
-    mem = stat.ullAvailPhys/1073741824 # GiB here
-    if mem < 1: raise MemoryError('Computer is busy now.')
+    if ThisSystem.current_system()[0] == 'windows':
+        mem = ThisSystem.win_memory()
+    else:
+        mem = ThisSystem.unix_like_memory()
+    if mem < 1: raise MemoryError('Computer is busy now.')       
     return '-Xmx'+str(int(mem))+'G'
 
 def record_cmd(arg):
-    proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while 1:
         out = proc.stdout.readline()
         if out == b'':
@@ -348,17 +394,20 @@ if __name__ == '__main__':
     import getpass
     import argparse
 
-    parser = argparse.ArgumentParser(description='zero minecraft launcher v{}, by {}'.format(
-                                    __version__, __author__))
     config_file = ConfigFile()
     game_file = GameFile()
+
+    parser = argparse.ArgumentParser(description='zero minecraft launcher v{}, by {}'.format(
+                                     __version__, __author__))
     
     parser.add_argument('-u', '--upgrade-game', choices=['release','snapshot'],
                         help='upgrade to latest release/snapshot')
-    parser.add_argument('-m', '--multi-version', action='store_true', help='isolate each version')
     parser.add_argument('-r', '--re-login', action='store_true', help='relogin account')
+    parser.add_argument('-d', '--daemonize', action='store_true', help='daemonize')
     parser.add_argument('-s', '--screen-size', help='custom screen size, [WIDTH]x[HEIGHT]')
     parser.add_argument('-j', '--join-server', help='join a server when launched, [IP](:[PORT])')
+
+    args = parser.parse_args()
     
     if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
@@ -370,14 +419,11 @@ if __name__ == '__main__':
         config_file.read_config()
         email = config_file.email
         expires_time = config_file.expires_time
-        current_version = config_file.current_version
         
-        args = parser.parse_args()
-        custom_arguments = ' '
-        
+        custom_arguments = ''
         if args.screen_size:
             width, height = args.screen_size.split('x')
-            custom_arguments += '--width {} --height {} '.format(width, height)
+            custom_arguments += ' --width {} --height {}'.format(width, height)
         
         if args.join_server:
             s = args.join_server.split(':')
@@ -385,13 +431,15 @@ if __name__ == '__main__':
                 ip = s[0]; port = '25565'
             else:
                 ip, port = s
-            custom_arguments += '--server {} --port {} '.format(ip, port)
-        
-        version_type = 'release'
+            custom_arguments += ' --server {} --port {}'.format(ip, port)
+          
         if args.upgrade_game:
             version_type = args.upgrade_game
             current_version = None        
-        
+        else:
+            version_type = 'release'
+            current_version = config_file.current_version
+            
         if args.re_login:
             yggdrasil = Yggdrasil(email, getpass.getpass())
             yggdrasil.authenticate()
@@ -399,23 +447,20 @@ if __name__ == '__main__':
         else:
             yggdrasil = Yggdrasil(email, '')
         
-            if int(expires_time) < time.time():
+            if expires_time < time.time():
                 yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
             else:
                 try:
                     yggdrasil.validate(config_file.accessToken)
                 except:
-                    print('invalidated token ,refresh')
+                    print('invalidated token, try refresh')
                     try:
                         yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
                     except:
                         print("Someting is not quite right, try '--re-login'")
-                        exit(1)
+                        sys.exit(1)
                 else:
-                    yggdrasil.clientToken = config_file.clientToken
-                    yggdrasil.accessToken = config_file.accessToken
-                    yggdrasil.display_name = config_file.display_name
-                    yggdrasil.uuid = config_file.uuid
+                    yggdrasil = config_file
         
     game_file.get_game_json(current_version, version_type)
     
@@ -426,7 +471,7 @@ if __name__ == '__main__':
         uuid = yggdrasil.uuid,
         email = yggdrasil.email,
         current_version = game_file.latest_version,
-        expires_time = str(int(time.time()+2592000)) # a month
+        expires_time = int(time.time()+2592000) # a month
     )
     
     game_file.get_assetindex_json()
@@ -437,26 +482,27 @@ if __name__ == '__main__':
 
     natives_dir = game_file.cwd+game_file.game_json_file_dir+'natives'
 
-    if args.multi_version:
-        game_dir = game_file.cwd+'/.minecraft/version/'+game_file.latest_version
-    else:
-        game_dir = game_file.cwd+'/.minecraft'
     
     mc_arg = arguments.format(
         auth_player_name = yggdrasil.display_name,
         version_name =  game_file.latest_version,
-        game_directory = game_dir, 
+        game_directory = game_file.cwd+'/.minecraft', 
         assets_root = game_file.cwd+'/.minecraft/assets',
         assets_index_name = game_file.asset_index_id,
         auth_uuid = yggdrasil.uuid,
         auth_access_token = yggdrasil.accessToken,
         user_type = 'mojang',
-        version_type = game_file.json_game_json['type']
+        version_type = game_file.json_game_json['type']  
     ) + custom_arguments
 
-    final_args = 'javaw.exe -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
+    final_args = 'javaw -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
         '-XX:HeapDumpPath=minecraft.heapdump ' + get_memory() + ' -Djava.library.path=' + natives_dir + \
         ' -cp ' + class_path + game_file.game_json_file_dir + game_file.latest_version+'.jar ' + mc_arg
-
+    
+    if args.daemonize:
+        def execute_cmd(arg):
+            subprocess.Popen(arg,shell=True)
+    
     print('='*20+'Launching begin'+'='*20)
     execute_cmd(final_args)
+    
