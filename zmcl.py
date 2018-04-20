@@ -26,7 +26,7 @@ from threading import Thread
 class Yggdrasil:
     '''account verification and keeping token available'''
 
-    def __init__(self, email, password, clientToken=None):
+    def __init__(self, email, password, clientToken):
         self.server_url = 'https://authserver.mojang.com/'
         self.headers = {'Content-type': 'application/json'}
         self.clientToken = clientToken
@@ -418,7 +418,7 @@ if __name__ == '__main__':
     
     if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
-        yggdrasil = Yggdrasil(email, getpass.getpass())
+        yggdrasil = Yggdrasil(email, getpass.getpass(), None)
         yggdrasil.authenticate()
         current_version = None
         
@@ -448,7 +448,7 @@ if __name__ == '__main__':
             current_version = config_file.current_version
             
         if args.re_login:
-            yggdrasil = Yggdrasil(email, getpass.getpass())
+            yggdrasil = Yggdrasil(email, getpass.getpass(), config_file.clientToken)
             yggdrasil.authenticate()
             
         else:
