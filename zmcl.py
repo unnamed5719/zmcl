@@ -26,9 +26,10 @@ from threading import Thread
 class Yggdrasil:
     '''account verification and keeping token available'''
 
-    def __init__(self, email, password):
+    def __init__(self, email, password, clientToken=None):
         self.server_url = 'https://authserver.mojang.com/'
         self.headers = {'Content-type': 'application/json'}
+        self.clientToken = clientToken
         self.email = email
         self._password = password
 
@@ -40,6 +41,9 @@ class Yggdrasil:
             "username": self.email,
             "password": self._password
         }
+        if self.clientToken:
+            auth_payload['clientToken'] = self.clientToken
+        
         auth_requ = request.Request(url=authenticate_url,
                                     headers=self.headers,
                                     data=json.dumps(auth_payload).encode())
@@ -73,12 +77,15 @@ class Yggdrasil:
 
         return True
 
-    def validate(self, accessToken):
+    def validate(self, accessToken, clientToken):
         validate_url = self.server_url+'validate'
 
         validate_payload = {
             "accessToken": accessToken
         }
+        if clientToken:
+            validate_payload['clientToken'] = clientToken
+        
         validate_requ = request.Request(url=validate_url,
                                         headers=self.headers,
                                         data=json.dumps(validate_payload).encode())
@@ -103,7 +110,7 @@ class GameFile:
             new_size = FilesProsess.header(self.version_manifest_url)
             if new_size != old_size:
                 print('update found')
-                FilesProsess.local_dler(self,version_manifest_url,'.minecraft/version_manifest.json')
+                FilesProsess.local_dler(self.version_manifest_url,'.minecraft/version_manifest.json')
 
         with open('.minecraft/version_manifest.json') as file:
             version_manifest = json.loads(file.read())
@@ -445,13 +452,13 @@ if __name__ == '__main__':
             yggdrasil.authenticate()
             
         else:
-            yggdrasil = Yggdrasil(email, '')
+            yggdrasil = Yggdrasil(email, '', config_file.clientToken)
         
             if expires_time < time.time():
                 yggdrasil.refresh(config_file.accessToken, config_file.clientToken)
             else:
                 try:
-                    yggdrasil.validate(config_file.accessToken)
+                    yggdrasil.validate(config_file.accessToken,config_file.clientToken)
                 except:
                     print('invalidated token, try refresh')
                     try:
@@ -501,8 +508,7 @@ if __name__ == '__main__':
     
     if args.daemonize:
         def execute_cmd(arg):
-            subprocess.Popen(arg,shell=True)
+            subprocess.Popen(arg, shell=True)
     
     print('='*20+'Launching begin'+'='*20)
     execute_cmd(final_args)
-    
