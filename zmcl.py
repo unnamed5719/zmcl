@@ -81,10 +81,9 @@ class Yggdrasil:
         validate_url = self.server_url+'validate'
 
         validate_payload = {
-            "accessToken": accessToken
+            "accessToken": accessToken,
+            "clientToken": clientToken
         }
-        if clientToken:
-            validate_payload['clientToken'] = clientToken
         
         validate_requ = request.Request(url=validate_url,
                                         headers=self.headers,
@@ -101,17 +100,11 @@ class GameFile:
     def __init__(self):
         self.version_manifest_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
         self.objects_url = 'http://resources.download.minecraft.net/'
+        FilesProsess.auto_mkdir('.minecraft')
 
     def get_latest_json_version_url(self, ver, ver_type):
         if not os.path.exists('.minecraft/version_manifest.json'):
-            FilesProsess.local_dler(self,version_manifest_url,'.minecraft/version_manifest.json')
-        else:
-            old_size = os.path.getsize('.minecraft/version_manifest.json')
-            new_size = FilesProsess.header(self.version_manifest_url)
-            if new_size != old_size:
-                print('update found')
-                FilesProsess.local_dler(self.version_manifest_url,'.minecraft/version_manifest.json')
-
+            FilesProsess.local_dler(self.version_manifest_url,'.minecraft/version_manifest.json')
         with open('.minecraft/version_manifest.json') as file:
             version_manifest = json.loads(file.read())
         if ver:
@@ -191,8 +184,6 @@ class GameFile:
                 FilesProsess.auto_mkdir(self.game_json_file_dir+'natives')
                 FilesProsess.downloader(url, self.game_json_file_dir+'natives/'+file_name, size)
                 FilesProsess.unzip(self.game_json_file_dir+'natives/'+file_name, self.game_json_file_dir+'natives')
-                # os.remove(self.game_json_file_dir+'/natives/'+file_name)
-                # we don't need it any more, but will cost unnecessary download
             elif 'rules' in library:
                 if len(library['rules']) == patch:
                     print(library['name'], "isn't for current system, ignore")
@@ -230,13 +221,9 @@ class GameFile:
 
 class FilesProsess:
     '''process file'''
-
     def auto_mkdir(dirs):
         if not os.path.exists(dirs):
             os.makedirs(dirs)
-    
-    def header(url):
-        return int(request.urlopen(url).info()['Content-Length'])
 
     def local_dler(url, path):
         with open(path, 'wb') as file:
@@ -251,11 +238,10 @@ class FilesProsess:
             def process_bar(blocknum, blocksize, totalsize):
                 # https://docs.python.org/3/library/urllib.request.html#urllib.request.retrieve
                 percent = 100 * blocknum * blocksize / totalsize
-                if percent > 100: # don't know why most time will more than 100,
-                    percent = 100 # probably is file size + one percent of the file size.
                 print('%.2f%% %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
             print('Done!  ')
+                  #100.00%
 
     def unzip(file, file_path):
         if os.path.exists(file): # check if downloaded but haven't unzip
@@ -299,9 +285,9 @@ class DownloadWorker(Thread):
             name = os.path.split(path)[1]
             def process_bar(blocknum, blocksize, totalsize):
                 percent = 100 * blocknum * blocksize / totalsize
-                if percent > 100:
-                    percent = 100
-                print(name, '%.2f%%, %.2f MB' %(percent, totalsize/1048576), end='\r')
+                if percent > 100: # don't know why most time will more than 100,
+                    percent = 100 # probably is file size + one percent of the file size.
+                print(name, '%.2f%% %.2f MB' %(percent, totalsize/1048576), end='\r')
             request.urlretrieve(url, path, process_bar)
             print('Done!')
 
@@ -338,34 +324,10 @@ class ThisSystem:
             return 'linux', 1
     
     def win_memory():
-        import ctypes
-        class mem_class(ctypes.Structure):
-            '''get windows memory'''
-            # From https://stackoverflow.com/questions/2017545/
-            _fields_ = [
-                ("dwLength", ctypes.c_ulong),             # sizeof(mem_class)
-                ("dwMemoryLoad", ctypes.c_ulong),         # percent of memory in use
-                ("ullTotalPhys", ctypes.c_ulonglong),     # bytes of physical memory
-                ("ullAvailPhys", ctypes.c_ulonglong),     # free physical memory bytes
-                ("ullTotalPageFile", ctypes.c_ulonglong), # bytes of paging file
-                ("ullAvailPageFile", ctypes.c_ulonglong), # free bytes of paging file
-                ("ullTotalVirtual", ctypes.c_ulonglong),  # user bytes of address space
-                ("ullAvailVirtual", ctypes.c_ulonglong),  # free user bytes
-                ("sullAvailExtendedVirtual", ctypes.c_ulonglong), # always 0
-            ]
-        
-            def __init__(self):
-                # have to initialize this to the size of mem_class
-                self.dwLength = ctypes.sizeof(self)
-                super(mem_class, self).__init__()
-        
-        stat = mem_class()
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
-        mem = stat.ullAvailPhys/1073741824 # GiB here
-        return mem
-        
+        return int(os.popen('wmic os get FreePhysicalMemory').read().split()[1])/1048576
+
     def unix_like_memory():
-        with open("/proc/meminfo") as m:
+        with open('/proc/meminfo') as m:
             lines = m.readlines()   
         for line in lines:  
             if line.split(':')[0] == 'MemFree':
@@ -383,7 +345,7 @@ def get_memory():
     return '-Xmx'+str(int(mem))+'G'
 
 def record_cmd(arg):
-    proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     while 1:
         out = proc.stdout.readline()
         if out == b'':
@@ -416,12 +378,17 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
+
+    
     if not os.path.exists(config_file.config_file_name):
         email = input('Email:')
         yggdrasil = Yggdrasil(email, getpass.getpass(), None)
         yggdrasil.authenticate()
-        current_version = None
         
+        current_version = None
+        custom_arguments = ''
+        version_type = 'release'
+
     else:
         config_file.read_config()
         email = config_file.email
@@ -442,7 +409,8 @@ if __name__ == '__main__':
           
         if args.upgrade_game:
             version_type = args.upgrade_game
-            current_version = None        
+            current_version = None
+            os.remove('.minecraft/version_manifest.json')
         else:
             version_type = 'release'
             current_version = config_file.current_version
@@ -503,8 +471,8 @@ if __name__ == '__main__':
     ) + custom_arguments
 
     final_args = 'javaw -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
-        '-XX:HeapDumpPath=minecraft.heapdump ' + get_memory() + ' -Djava.library.path=' + natives_dir + \
-        ' -cp ' + class_path + game_file.game_json_file_dir + game_file.latest_version+'.jar ' + mc_arg
+        get_memory() + ' -Djava.library.path=' + natives_dir + ' -cp ' + class_path + \
+        game_file.game_json_file_dir + game_file.latest_version+'.jar ' + mc_arg
     
     if args.daemonize:
         def execute_cmd(arg):
