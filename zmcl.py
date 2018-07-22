@@ -170,7 +170,6 @@ class GameFile:
         class_path = ''
         self.cwd = os.getcwd().replace('\\', '/')+'/'
         system, patch = ThisSystem.current_system()
-        dlos = 'natives-'+system
         for library in self.json_game_json['libraries']:
             if 'natives' in library:
                 if 'rules' in library:
@@ -178,6 +177,10 @@ class GameFile:
                         # when it is 2, we download it, just don't know how to handle this
                         print(library['name'], "isn't for current system, ignore")
                         continue
+                if not system in library['natives']:
+                    print(library['name'], "isn't for current system, ignore")
+                    continue                
+                dlos = library['natives'][system]
                 url = library['downloads']['classifiers'][dlos]['url']
                 size = library['downloads']['classifiers'][dlos]['size']
                 file_name = os.path.split(url)[1]
@@ -190,7 +193,7 @@ class GameFile:
                     continue
                 url = library['downloads']['artifact']['url']
                 size = library['downloads']['artifact']['size']
-                full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
+                full_path = '.minecraft/libraries/' + library['downloads']['artifact']['path']
                 file_path = os.path.split(full_path)[0]
                 FilesProsess.auto_mkdir(file_path)
                 FilesProsess.downloader(url, full_path, size)
@@ -198,7 +201,7 @@ class GameFile:
             else:
                 url = library['downloads']['artifact']['url']
                 size = library['downloads']['artifact']['size']
-                full_path = url.replace('https://libraries.minecraft.net', '.minecraft/libraries')
+                full_path = '.minecraft/libraries/' + library['downloads']['artifact']['path']
                 file_path = os.path.split(full_path)[0]
                 FilesProsess.auto_mkdir(file_path)
                 FilesProsess.downloader(url, full_path, size)
@@ -226,8 +229,9 @@ class FilesProsess:
             os.makedirs(dirs)
 
     def local_dler(url, path):
-        with open(path, 'wb') as file:
-            file.write(request.urlopen(url).read())
+        if not os.path.exists(path):
+            with open(path, 'wb') as file:
+                file.write(request.urlopen(url).read())
         
     def downloader(url, path, size): # path aka path + file name
         if os.path.exists(path) and os.path.getsize(path) == size:
@@ -344,19 +348,24 @@ def get_memory():
     if mem < 1: raise MemoryError('Computer is busy now.')       
     return '-Xmx'+str(int(mem))+'G'
 
-def record_cmd(arg):
-    proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    while 1:
-        out = proc.stdout.readline()
-        if out == b'':
-            break
-        yield out.rstrip()
+def record_cmd(arg, daemon):
+    if daemon:
+        subprocess.Popen(arg, shell=True)
+    else:
+        proc = subprocess.Popen(arg, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        while 1:
+            out = proc.stdout.readline()
+            if out == b'':
+                break
+            yield out.rstrip()
 
-def execute_cmd(arg):
-    encoding = sys.stdout.encoding
-    for i in record_cmd(arg):
-        print(i.decode(encoding))
-
+def execute_cmd(arg, daemon):
+    if not daemon:
+        encoding = sys.stdout.encoding
+        for i in record_cmd(arg, daemon):
+            print(i.decode(encoding))
+    else:
+        record_cmd(arg, daemon)
 
 if __name__ == '__main__':
     import time
@@ -473,10 +482,7 @@ if __name__ == '__main__':
     final_args = 'javaw -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow ' + \
         get_memory() + ' -Djava.library.path=' + natives_dir + ' -cp ' + class_path + \
         game_file.game_json_file_dir + game_file.latest_version+'.jar ' + mc_arg
-    
-    if args.daemonize:
-        def execute_cmd(arg):
-            subprocess.Popen(arg, shell=True)
-    
+        # -XX:+UseConcMarkSweepGC -XX:+CMSIncrementalMode -XX:-UseAdaptiveSizePolicy
+
     print('='*20+'Launching begin'+'='*20)
-    execute_cmd(final_args)
+    execute_cmd(final_args, args.daemonize)
